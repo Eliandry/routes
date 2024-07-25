@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Map Application</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map { height: 500px; width: 100%; }
+    </style>
+</head>
+<body>
+    <h1>Select Points on the Map</h1>
+    <div id="map"></div>
+    <input type="text" id="route-name" placeholder="Route name">
+    <button id="calculate-route">Calculate Route</button>
+    <div id="result"></div>
+    <h2>Saved Routes</h2>
+    <ul id="routes-list">
+        {% for route in routes %}
+            <li><a href="#" class="route-link" data-route-id="{{ route.id }}">{{ route.name }}</a></li>
+        {% endfor %}
+    </ul>
+    <script>
+        var map = L.map('map').setView([55.753215, 37.622504], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        var points = [];
+        var startPoint = [55.753215, 37.622504];
+        L.marker(startPoint, {icon: L.icon({iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-red.png', iconSize: [38, 95]})}).addTo(map);
+
+        map.on('click', function(e) {
+            var marker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+            points.push([e.latlng.lat, e.latlng.lng]);
+        });
+
+        $('#calculate-route').on('click', function() {
+            var routeName = $('#route-name').val();
+            if (!routeName) {
+                alert('Please enter a route name');
+                return;
+            }
+
+            $.ajax({
+                url: '/calculate',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ points: points, route_name: routeName }),
+                success: function(response) {
+                    if (response.error) {
+                        $('#result').html('<p>Error: ' + response.error + '</p>');
+                        return;
+                    }
+
+                    var routeCoordinates = response.route.map(function(coord) {
+                        return [coord[1], coord[0]];
+                    });
+
+                    L.polyline(routeCoordinates, {color: 'blue'}).addTo(map);
+
+                    var resultHtml = '';
+                    response.google_maps_urls.forEach(function(url, index) {
+                        resultHtml += '<p>Segment ' + (index + 1) + ': <a href="' + url + '" target="_blank">Open in Google Maps</a></p>';
+                    });
+
+                    $('#result').html(resultHtml);
+                }
+            });
+        });
+
+        $(document).on('click', '.route-link', function() {
+            var routeId = $(this).data('route-id');
+            $.ajax({
+                url: '/view_route/' + routeId,
+                method: 'GET',
+                success: function(response) {
+                    var points = response.points;
+                    var latlngs = points.map(function(point) {
+                        return [point.latitude, point.longitude];
+                    });
+
+                    L.polyline(latlngs, {color: 'blue'}).addTo(map);
+
+                    var resultHtml = '';
+                    response.google_maps_urls.forEach(function(url, index) {
+                        resultHtml += '<p>Segment ' + (index + 1) + ': <a href="' + url + '" target="_blank">Open in Google Maps</a></p>';
+                    });
+
+                    $('#result').html(resultHtml);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
